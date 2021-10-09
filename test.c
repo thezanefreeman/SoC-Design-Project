@@ -1,4 +1,8 @@
 
+/*
+Our Gemm Function
+*/
+/*
 void gemm_nn(int M, int N, int K, float ALPHA,
     float *A, int lda,
     float *B, int ldb,
@@ -35,7 +39,7 @@ void gemm_nn(int M, int N, int K, float ALPHA,
         }
     }
 }
-
+*/
 
 /*
 Hardware Abstraction Layer
