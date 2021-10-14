@@ -1987,86 +1987,77 @@ int is_fma_avx2() {
 
 #define MAP_SIZE 4096UL
 #define MAP_MASK (MAP_SIZE - 1)
-
 #define READ_CMD  (0x0 << 31)
 #define WRITE_CMD (0x1 << 31)
-
 #define COMMAND_MASK 0x80000000
-
-
-// int det_int = 0;
-
-// // signal handler for receiving events from hardware driver
-// void sighandler(int signo)
-// {
-//   if(signo==SIGIO)
-//     {
-//       det_int++;
-//       printf("\nInterrupt detected\n");
-//     }
-//   return;
-// }
-
+int det_int = 0;
+// signal handler for receiving events from hardware driver
+void sighandler(int signo)
+{
+  if(signo==SIGIO)
+    {
+      det_int++;
+      printf("\nInterrupt detected\n");
+    }
+  return;
+}
+volatile unsigned int *base, *address;
+unsigned long addr1, addr2, addr3, addr4, addr0, offset, value;
+unsigned long val, result;
+unsigned long val, result;
+struct sigaction action;
+int fd, fd_fpga;
 void gemm_nn(int M, int N, int K, float ALPHA,
     float *A, int lda,
     float *B, int ldb,
     float *C, int ldc)
 {
-//     unsigned long val, result;
-//     struct sigaction action;
-//     int fd;
+    // install signal handler
+  sigemptyset(&action.sa_mask);
+  sigaddset(&action.sa_mask, SIGIO);
 
-//     // install signal handler
-//   sigemptyset(&action.sa_mask);
-//   sigaddset(&action.sa_mask, SIGIO);
+  action.sa_handler = sighandler;
+  action.sa_flags=0;
 
-//   action.sa_handler = sighandler;
-//   action.sa_flags=0;
+  sigaction(SIGIO, &action, NULL);
 
-//   sigaction(SIGIO, &action, NULL);
+    // open hardware device (driver)
+  fd_fpga=open("/dev/fpga", O_RDWR);
+  if(fd_fpga < 0)
+  {
 
-//     // open hardware device (driver)
-//   fd=open("/dev/fpga", O_RDWR);
-//   if(fd < 0)
-//   {
+      printf("Unable to open /dev/fpga.  Ensure it exists!\n");
+      return -1;
+  }
+  fcntl(fd_fpga, F_SETOWN, getpid());
+  fcntl(fd_fpga, F_SETFL, fcntl(fd_fpga, F_GETFL)|O_ASYNC);
 
-//       printf("Unable to open /dev/fpga.  Ensure it exists!\n");
-//       return -1;
-//   }
-//     fcntl(fd, F_SETOWN, getpid());
-//     fcntl(fd, F_SETFL, fcntl(fd, F_GETFL)|O_ASYNC);
+        //Read hardware 
+    ioctl(fd_fpga, READ_CMD + 0, &result);
+    printf("The SystemC time is %lu ns\n", result);
 
-//         //Read hardware 
-//     ioctl(fd, READ_CMD + 0, &result);
+    ioctl(fd_fpga, READ_CMD + 4, &result);
 
-//     printf("The SystemC time is %lu ns\n", result);
+    printf("The SystemC clock is %lu\n", result);
 
-//     ioctl(fd, READ_CMD + 4, &result);
+  //Read interrupt
+    ioctl(fd_fpga, READ_CMD + 3, &result);
+    printf("Interrupt is %lu\n", result);
 
-//     printf("The SystemC clock is %lu\n", result);
+  //Trigger interrupt
+  val = 1;
+  ioctl(fd_fpga, WRITE_CMD + 3, &val);
 
-//   // Read interrupt
-//     // ioctl(fd, READ_CMD + 3, &result);
-//     // printf("Interrupt is %lu\n", result);
+  //Wait for interrupt
+//   while(!det_int) continue;
 
-//   // Trigger interrupt
-//   //val = 1;
-//   //ioctl(fd, WRITE_CMD + 3, &val);
-
-//   //Wait for interrupt
-//   //while(!det_int) continue;
-
-//   //printf("Interrupt received\n");
+  printf("Interrupt received\n");
 
 //   //In the end, close the device driver
-//   //close(fd);
+  close(fd_fpga);
 
 
-// /WORKING!!!///
-    volatile unsigned int *base, *address;
-    unsigned long addr1, addr2, addr3, addr4, addr0, offset, value;
-    unsigned long val, result;
-
+//------------------WORKING----------------------------//
       //Predefined addresses.
     addr0 = 0xa0000000ul;  // DEBUG_TIME
     addr1 = 0xa0000004ul;  // DEBUG_WRITE
@@ -2074,32 +2065,32 @@ void gemm_nn(int M, int N, int K, float ALPHA,
     addr3 = 0xa000000Cul;  // DEBUG_IRQ
     addr4 = 0xa0000010ul;  // DEBUG_REALTIME
       //Open memory as a file
-    int fd = open("/dev/mem", O_RDWR|O_SYNC);
+    fd = open("/dev/mem", O_RDWR|O_SYNC);
     if(!fd)
     {
       printf("Unable to open /dev/mem.  Ensure it exists (major=1, minor=1)\n");
       return -1;
     }
-  base = (unsigned int *)mmap(NULL, MAP_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, fd, addr0 & ~MAP_MASK);	
-  if((base == MAP_FAILED))
-  {
-    printf("mapping failed\n");
-    fflush(stdout);
-  }	
+    base = (unsigned int *)mmap(NULL, MAP_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, fd, addr0 & ~MAP_MASK);	
+    if((base == MAP_FAILED))
+    {
+        printf("mapping failed\n");
+        fflush(stdout);
+    }	
 
       //Read hardware 
-    address = base + ((addr0 & MAP_MASK)>>2);
-    result = *address;
+    // address = base + ((addr0 & MAP_MASK)>>2);
+    // result = *address;
 
-    printf("The SystemC time is %lu ns\n", result);
+    // printf("The SystemC time is %lu ns\n", result);
 
-    address = base + ((addr4 & MAP_MASK)>>2);
-    result = *address;
+    // address = base + ((addr4 & MAP_MASK)>>2);
+    // result = *address;
 
-    printf("The SystemC clock is %lu\n", result);
-    munmap((void*)base, MAP_SIZE);
+    // printf("The SystemC clock is %lu\n", result);
+    // munmap((void*)base, MAP_SIZE);
     close(fd);
-
+    //printf("inside gemm function");
     int i, j, k, B_FX, C_FX, A_FX, FixedPointValue, scale;
     float B_Float, A_Float, C_Float, A_PART_TWO;
     scale = 16;
